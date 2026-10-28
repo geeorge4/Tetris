@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RG Mini Games</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            background-color: #1e1e2e;
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 15px;
+            text-align: center;
+            overflow: hidden; /* Чтобы не было скролла */
+        }
+        
+        /* Главное меню */
+        #menu { display: flex; flex-direction: column; width: 100%; max-width: 300px; gap: 15px; }
+        .menu-btn {
+            background: linear-gradient(135deg, #2481cc, #1b65a1);
+            color: white; border: none; padding: 20px; font-size: 18px; font-weight: bold;
+            border-radius: 15px; cursor: pointer; box-shadow: 0 4px 15px rgba(36, 129, 204, 0.3);
+            transition: transform 0.1s; width: 100%; display: flex; justify-content: center; align-items: center; gap: 10px;
+        }
+        .menu-btn:active { transform: scale(0.96); }
+
+        /* Экран игры */
+        .game-screen { display: none; flex-direction: column; width: 100%; max-width: 400px; align-items: center; }
+        .back-btn {
+            background: #333; color: white; border: none; padding: 10px 20px; border-radius: 10px;
+            cursor: pointer; margin-top: 15px; font-size: 14px; width: 100%;
+        }
+
+        /* Стили для Угадай Число */
+        #guess-input { width: 100%; padding: 15px; font-size: 20px; border-radius: 12px; border: 1px solid #444; background: #2a2a3a; color: white; text-align: center; margin-bottom: 15px; outline: none; }
+        #guess-btn, #restart-guess { background: linear-gradient(135deg, #2481cc, #1b65a1); color: white; border: none; padding: 15px; font-size: 18px; font-weight: bold; border-radius: 12px; cursor: pointer; width: 100%; margin-bottom: 10px; }
+        #guess-message { font-size: 16px; min-height: 40px; margin-top: 10px; font-weight: bold; }
+
+        /* Стили для Сапера */
+        #minesweeper-grid { display: grid; gap: 2px; margin: 10px 0; }
+        .cell { width: 30px; height: 30px; background: #444; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; color: white; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+        .cell.revealed { background: #222; cursor: default; }
+        .cell.mine { background: #cc2424; }
+        .cell.flag { background: #2481cc; }
+        #minesweeper-status { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+
+        /* Стили для Тетриса */
+        #tetris-canvas { background: #000; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #tetris-controls { display: flex; justify-content: space-between; width: 100%; margin-top: 10px; }
+        .ctrl-btn { background: #333; color: white; border: none; padding: 15px 25px; border-radius: 10px; font-size: 20px; cursor: pointer; user-select: none; }
+        .ctrl-btn:active { background: #555; }
+    </style>
+</head>
+<body>
+
+    <!-- ГЛАВНОЕ МЕНЮ -->
+    <div id="menu">
+        <h1 style="color: #2481cc; font-size: 28px; margin-bottom: 20px;">🎮 RG Mini Games</h1>
+        <button class="menu-btn" onclick="startGame('guess')">🔢 Угадай число</button>
+        <button class="menu-btn" onclick="startGame('minesweeper')">💣 Сапер</button>
+        <button class="menu-btn" onclick="startGame('tetris')">🧱 Тетрис</button>
+    </div>
+
+    <!-- ЭКРАН: УГАДАЙ ЧИСЛО -->
+    <div id="game-guess" class="game-screen">
+        <h2>🔢 Угадай число</h2>
+        <p style="color: #a0a0a0; margin: 0 0 20px 0;">Я загадал число от 1 до 100</p>
+        <input type="number" id="guess-input" placeholder="Твое число" inputmode="numeric">
+        <button id="guess-btn">Проверить</button>
+        <button id="restart-guess" style="background: #444;">Начать заново</button>
+        <div id="guess-message"></div>
+        <button class="back-btn" onclick="backToMenu()">← Назад в меню</button>
+    </div>
+
+    <!-- ЭКРАН: САПЕР -->
+    <div id="game-minesweeper" class="game-screen">
+        <h2>💣 Сапер</h2>
+        <div id="minesweeper-status">Найди все мины!</div>
+        <div id="minesweeper-grid"></div>
+        <button id="minesweeper-restart" style="background: #444; color: white; border: none; padding: 10px 20px; border-radius: 10px; margin-top: 10px;">Заново</button>
+        <button class="back-btn" onclick="backToMenu()">← Назад в меню</button>
+    </div>
+
+    <!-- ЭКРАН: ТЕТРИС -->
+    <div id="game-tetris" class="game-screen">
+        <h2>🧱 Тетрис</h2>
+        <canvas id="tetris-canvas" width="200" height="400"></canvas>
+        <div id="tetris-controls">
+            <button class="ctrl-btn" id="move-left">←</button>
+            <button class="ctrl-btn" id="rotate">⟳</button>
+            <button class="ctrl-btn" id="move-right">→</button>
+        </div>
+        <button class="back-btn" onclick="backToMenu()">← Назад в меню</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.enableClosingConfirmation();
+
+        function vibrate(type) {
+            if (tg.HapticFeedback) {
+                if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
+                else if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+                else tg.HapticFeedback.impactOccurred('light');
+            }
+        }
+
+        function startGame(gameId) {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById(`game-${gameId}`).style.display = 'flex';
+            vibrate('light');
+            if (gameId === 'minesweeper') initMinesweeper();
+            if (gameId === 'tetris') startTetris();
+        }
+
+        function backToMenu() {
+            document.querySelectorAll('.game-screen').forEach(el => el.style.display = 'none');
+            document.getElementById('menu').style.display = 'flex';
+            vibrate('light');
+            // Остановка тетриса при выходе
+            if (typeof stopTetris === 'function') stopTetris(); 
+        }
+
+        // ==========================================
+        // ИГРА 1: УГАДАЙ ЧИСЛО
+        // ==========================================
+        let secretNumber = Math.floor(Math.random() * 100) + 1;
+        let guessAttempts = 0;
+        const guessInput = document.getElementById('guess-input');
+        const guessBtn = document.getElementById('guess-btn');
+        const guessMessage = document.getElementById('guess-message');
+        const restartGuess = document.getElementById('restart-guess');
+
+        guessBtn.addEventListener('click', () => {
+            vibrate('light');
+            const val = parseInt(guessInput.value);
+            if (isNaN(val) || val < 1 || val > 100) {
+                guessMessage.innerText = "⚠️ Введи число от 1 до 100!";
+                guessMessage.className = "lose"; vibrate('error'); return;
+            }
+            guessAttempts++;
+            if (val === secretNumber) {
+                guessMessage.innerText = `🎉 Угадал! Это ${secretNumber}. Попыток: ${guessAttempts}`;
+                guessMessage.className = "win"; guessBtn.disabled = true; vibrate('success');
+            } else if (val < secretNumber) {
+                guessMessage.innerText = `📈 Больше (попытка ${guessAttempts})`;
+                guessMessage.className = "";
+            } else {
+                guessMessage.innerText = `📉 Меньше (попытка ${guessAttempts})`;
+                guessMessage.className = "";
+            }
+            guessInput.value = ''; guessInput.focus();
+        });
+
+        restartGuess.addEventListener('click', () => {
+            vibrate('light');
+            secretNumber = Math.floor(Math.random() * 100) + 1;
+            guessAttempts = 0; guessMessage.innerText = ""; guessBtn.disabled = false; guessInput.value = '';
+        });
+
+        // ==========================================
+        // ИГРА 2: САПЕР (Упрощенный 5x5)
+        // ==========================================
+        const MS_SIZE = 5; const MS_MINES = 3;
+        let msGrid = []; let msRevealed = 0; let msGameOver = false;
+
+        function initMinesweeper() {
+            const container = document.getElementById('minesweeper-grid');
+            container.style.gridTemplateColumns = `repeat(${MS_SIZE}, 1fr)`;
+            container.innerHTML = '';
+            msGrid = Array(MS_SIZE).fill().map(() => Array(MS_SIZE).fill({mine: false, revealed: false, flagged: false, count: 0}));
+            msRevealed = 0; msGameOver = false;
+            document.getElementById('minesweeper-status').innerText = 'Найди все мины!';
+
+            // Расставляем мины
+            let minesPlaced = 0;
+            while (minesPlaced < MS_MINES) {
+                let r = Math.floor(Math.random() * MS_SIZE);
+                let c = Math.floor(Math.random() * MS_SIZE);
+                if (!msGrid[r][c].mine) { msGrid[r][c].mine = true; minesPlaced++; }
+            }
+
+            // Считаем соседние мины
+            for (let r = 0; r < MS_SIZE; r++) {
+                for (let c = 0; c < MS_SIZE; c++) {
+                    if (msGrid[r][c].mine) continue;
+                    let count = 0;
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            if (r+dr >= 0 && r+dr < MS_SIZE && c+dc >= 0 && c+dc < MS_SIZE && msGrid[r+dr][c+dc].mine) count++;
+                        }
+                    }
+                    msGrid[r][c].count = count;
+                }
+            }
+
+            // Создаем кнопки
+            for (let r = 0; r < MS_SIZE; r++) {
+                for (let c = 0; c < MS_SIZE; c++) {
+                    const btn = document.createElement('button');
+                    btn.className = 'cell';
+                    btn.onclick = () => revealCell(r, c);
+                    btn.oncontextmenu = (e) => { e.preventDefault(); flagCell(r, c); };
+                    container.appendChild(btn);
+                }
+            }
+        }
+
+        function revealCell(r, c) {
+            if (msGameOver) return;
+            let cell = msGrid[r][c];
+            if (cell.revealed || cell.flagged) return;
+            vibrate('light');
+            cell.revealed = true; msRevealed++;
+            const btn = document.getElementById('minesweeper-grid').children[r * MS_SIZE + c];
+            btn.classList.add('revealed');
+
+            if (cell.mine) {
+                btn.classList.add('mine'); btn.innerText = '💣'; msGameOver = true;
+                document.getElementById('minesweeper-status').innerText = '💥 Бум! Ты проиграл.';
+                vibrate('error');
+            } else {
+                if (cell.count > 0) { btn.innerText = cell.count; btn.style.color = '#2481cc'; }
+                if (msRevealed === MS_SIZE * MS_SIZE - MS_MINES) {
+                    document.getElementById('minesweeper-status').innerText = '🏆 Победа! Все мины найдены.';
+                    msGameOver = true; vibrate('success');
+                }
+            }
+        }
+
+        function flagCell(r, c) {
+            if (msGameOver) return;
+            let cell = msGrid[r][c];
+            if (cell.revealed) return;
+            vibrate('light');
+            cell.flagged = !cell.flagged;
+            const btn = document.getElementById('minesweeper-grid').children[r * MS_SIZE + c];
+            btn.innerText = cell.flagged ? '🚩' : '';
+            btn.classList.toggle('flag');
+        }
+
+        document.getElementById('minesweeper-restart').addEventListener('click', () => { vibrate('light'); initMinesweeper(); });
+
+        // ==========================================
+        // ИГРА 3: ТЕТРИС (Мини-версия)
+        // ==========================================
+        const canvas = document.getElementById('tetris-canvas');
+        const ctx = canvas.getContext('2d');
+        const BLOCK_SIZE = 20; 
+        const COLS = canvas.width / BLOCK_SIZE; 
+        const ROWS = canvas.height / BLOCK_SIZE; 
+
+        let board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+        let tetrisInterval = null;
+        let currentPiece = null;
+        let gameOver = false;
+
+        // Фигуры (координаты)
+        const PIECES = [
+            [[1,1,1,1]], // I
+            [[1,1],[1,1]], // O
+            [[0,1,0],[1,1,1]], // T
+            [[1,0,0],[1,1,1]], // L
+            [[0,0,1],[1,1,1]]  // J
+        ];
+
+        function createPiece() {
+            const shape = PIECES[Math.floor(Math.random() * PIECES.length)];
+            return { shape: shape, x: Math.floor(COLS/2) - 1, y: 0 };
+        }
+
+        function drawBoard() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Рисуем сетку
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (board[r][c]) {
+                        ctx.fillStyle = '#2481cc';
+                        ctx.fillRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                    }
+                }
+            }
+            
+            // Рисуем фигуру
+            if (currentPiece) {
+                ctx.fillStyle = '#2ea043';
+                for (let r = 0; r < currentPiece.shape.length; r++) {
+                    for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                        if (currentPiece.shape[r][c]) {
+                            ctx.fillRect((currentPiece.x + c) * BLOCK_SIZE, (currentPiece.y + r) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                        }
+                    }
+                }
+            }
+        }
+
+        function moveDown() {
+            if (!currentPiece || gameOver) return;
+            currentPiece.y++;
+            if (collision()) {
+                currentPiece.y--;
+                lockPiece();
+                currentPiece = createPiece();
+                if (collision()) {
+                    gameOver = true;
+                    clearInterval(tetrisInterval);
+                    alert('Игра окончена!');
+                }
+            }
+            drawBoard();
+        }
+
+        function collision() {
+            for (let r = 0; r < currentPiece.shape.length; r++) {
+                for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                    if (currentPiece.shape[r][c]) {
+                        let boardX = currentPiece.x + c;
+                        let boardY = currentPiece.y + r;
+                        if (boardX < 0 || boardX >= COLS || boardY >= ROWS || board[boardY][boardX]) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function lockPiece() {
+            for (let r = 0; r < currentPiece.shape.length; r++) {
+                for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                    if (currentPiece.shape[r][c]) {
+                        board[currentPiece.y + r][currentPiece.x + c] = 1;
+                    }
+                }
+            }
+            // Очистка линий (упрощенно)
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (board[r].every(cell => cell)) {
+                    board.splice(r, 1);
+                    board.unshift(Array(COLS).fill(0));
+                }
+            }
+        }
+
+        function startTetris() {
+            board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+            currentPiece = createPiece();
+            gameOver = false;
+            drawBoard();
+            if (tetrisInterval) clearInterval(tetrisInterval);
+            tetrisInterval = setInterval(moveDown, 800);
+        }
+
+        function stopTetris() {
+            if (tetrisInterval) clearInterval(tetrisInterval);
+            gameOver = true;
+        }
+
+        document.getElementById('move-left').addEventListener('click', () => { if(!currentPiece) return; currentPiece.x--; if(collision()) currentPiece.x++; drawBoard(); });
+        document.getElementById('move-right').addEventListener('click', () => { if(!currentPiece) return; currentPiece.x++; if(collision()) currentPiece.x--; drawBoard(); });
+        document.getElementById('rotate').addEventListener('click', () => {
+            if(!currentPiece) return;
+            const oldShape = currentPiece.shape;
+            currentPiece.shape = currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i]).reverse());
+            if (collision()) currentPiece.shape = oldShape;
+            drawBoard();
+        });
+
+    </script>
+</body>
+  </html>
