@@ -19,7 +19,7 @@
             margin: 0;
             padding: 15px;
             text-align: center;
-            overflow: hidden; /* Чтобы не было скролла */
+            overflow: hidden;
         }
         
         /* Главное меню */
@@ -126,7 +126,6 @@
             document.querySelectorAll('.game-screen').forEach(el => el.style.display = 'none');
             document.getElementById('menu').style.display = 'flex';
             vibrate('light');
-            // Остановка тетриса при выходе
             if (typeof stopTetris === 'function') stopTetris(); 
         }
 
@@ -145,18 +144,18 @@
             const val = parseInt(guessInput.value);
             if (isNaN(val) || val < 1 || val > 100) {
                 guessMessage.innerText = "⚠️ Введи число от 1 до 100!";
-                guessMessage.className = "lose"; vibrate('error'); return;
+                guessMessage.style.color = "#cc2424"; vibrate('error'); return;
             }
             guessAttempts++;
             if (val === secretNumber) {
                 guessMessage.innerText = `🎉 Угадал! Это ${secretNumber}. Попыток: ${guessAttempts}`;
-                guessMessage.className = "win"; guessBtn.disabled = true; vibrate('success');
+                guessMessage.style.color = "#2ea043"; guessBtn.disabled = true; vibrate('success');
             } else if (val < secretNumber) {
                 guessMessage.innerText = `📈 Больше (попытка ${guessAttempts})`;
-                guessMessage.className = "";
+                guessMessage.style.color = "white";
             } else {
                 guessMessage.innerText = `📉 Меньше (попытка ${guessAttempts})`;
-                guessMessage.className = "";
+                guessMessage.style.color = "white";
             }
             guessInput.value = ''; guessInput.focus();
         });
@@ -177,11 +176,10 @@
             const container = document.getElementById('minesweeper-grid');
             container.style.gridTemplateColumns = `repeat(${MS_SIZE}, 1fr)`;
             container.innerHTML = '';
-            msGrid = Array(MS_SIZE).fill().map(() => Array(MS_SIZE).fill({mine: false, revealed: false, flagged: false, count: 0}));
+            msGrid = Array(MS_SIZE).fill().map(() => Array(MS_SIZE).fill().map(() => ({mine: false, revealed: false, flagged: false, count: 0})));
             msRevealed = 0; msGameOver = false;
             document.getElementById('minesweeper-status').innerText = 'Найди все мины!';
 
-            // Расставляем мины
             let minesPlaced = 0;
             while (minesPlaced < MS_MINES) {
                 let r = Math.floor(Math.random() * MS_SIZE);
@@ -189,7 +187,6 @@
                 if (!msGrid[r][c].mine) { msGrid[r][c].mine = true; minesPlaced++; }
             }
 
-            // Считаем соседние мины
             for (let r = 0; r < MS_SIZE; r++) {
                 for (let c = 0; c < MS_SIZE; c++) {
                     if (msGrid[r][c].mine) continue;
@@ -203,8 +200,176 @@
                 }
             }
 
-            // Создаем кнопки
             for (let r = 0; r < MS_SIZE; r++) {
+                for (let c = 0; c < MS_SIZE; c++) {
+                    const btn = document.createElement('button');
+                    btn.className = 'cell';
+                    btn.onclick = () => revealCell(r, c);
+                    btn.oncontextmenu = (e) => { e.preventDefault(); flagCell(r, c); };
+                    container.appendChild(btn);
+                }
+            }
+        }
+
+        function revealCell(r, c) {
+            if (msGameOver) return;
+            let cell = msGrid[r][c];
+            if (cell.revealed || cell.flagged) return;
+            vibrate('light');
+            cell.revealed = true; msRevealed++;
+            const btn = document.getElementById('minesweeper-grid').children[r * MS_SIZE + c];
+            btn.classList.add('revealed');
+
+            if (cell.mine) {
+                btn.classList.add('mine'); btn.innerText = '💣'; msGameOver = true;
+                document.getElementById('minesweeper-status').innerText = '💥 Бум! Ты проиграл.';
+                vibrate('error');
+            } else {
+                if (cell.count > 0) { btn.innerText = cell.count; btn.style.color = '#2481cc'; }
+                if (msRevealed === MS_SIZE * MS_SIZE - MS_MINES) {
+                    document.getElementById('minesweeper-status').innerText = '🏆 Победа! Все мины найдены.';
+                    msGameOver = true; vibrate('success');
+                }
+            }
+        }
+
+        function flagCell(r, c) {
+            if (msGameOver) return;
+            let cell = msGrid[r][c];
+            if (cell.revealed) return;
+            vibrate('light');
+            cell.flagged = !cell.flagged;
+            const btn = document.getElementById('minesweeper-grid').children[r * MS_SIZE + c];
+            btn.innerText = cell.flagged ? '🚩' : '';
+            btn.classList.toggle('flag');
+        }
+
+        document.getElementById('minesweeper-restart').addEventListener('click', () => { vibrate('light'); initMinesweeper(); });
+
+        // ==========================================
+        // ИГРА 3: ТЕТРИС (Мини-версия)
+        // ==========================================
+        const canvas = document.getElementById('tetris-canvas');
+        const ctx = canvas.getContext('2d');
+        const BLOCK_SIZE = 20; 
+        const COLS = canvas.width / BLOCK_SIZE; 
+        const ROWS = canvas.height / BLOCK_SIZE; 
+
+        let board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+        let tetrisInterval = null;
+        let currentPiece = null;
+        let gameOver = false;
+
+        const PIECES = [
+            [[1,1,1,1]], // I
+            [[1,1],[1,1]], // O
+            [[0,1,0],[1,1,1]], // T
+            [[1,0,0],[1,1,1]], // L
+            [[0,0,1],[1,1,1]]  // J
+        ];
+
+        function createPiece() {
+            const shape = PIECES[Math.floor(Math.random() * PIECES.length)];
+            return { shape: shape, x: Math.floor(COLS/2) - 1, y: 0 };
+        }
+
+        function drawBoard() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (board[r][c]) {
+                        ctx.fillStyle = '#2481cc';
+                        ctx.fillRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                    }
+                }
+            }
+            
+            if (currentPiece) {
+                ctx.fillStyle = '#2ea043';
+                for (let r = 0; r < currentPiece.shape.length; r++) {
+                    for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                        if (currentPiece.shape[r][c]) {
+                            ctx.fillRect((currentPiece.x + c) * BLOCK_SIZE, (currentPiece.y + r) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                        }
+                    }
+                }
+            }
+        }
+
+        function moveDown() {
+            if (!currentPiece || gameOver) return;
+            currentPiece.y++;
+            if (collision()) {
+                currentPiece.y--;
+                lockPiece();
+                currentPiece = createPiece();
+                if (collision()) {
+                    gameOver = true;
+                    clearInterval(tetrisInterval);
+                    alert('Игра окончена!');
+                }
+            }
+            drawBoard();
+        }
+
+        function collision() {
+            for (let r = 0; r < currentPiece.shape.length; r++) {
+                for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                    if (currentPiece.shape[r][c]) {
+                        let boardX = currentPiece.x + c;
+                        let boardY = currentPiece.y + r;
+                        if (boardX < 0 || boardX >= COLS || boardY >= ROWS || board[boardY][boardX]) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function lockPiece() {
+            for (let r = 0; r < currentPiece.shape.length; r++) {
+                for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                    if (currentPiece.shape[r][c]) {
+                        board[currentPiece.y + r][currentPiece.x + c] = 1;
+                    }
+                }
+            }
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (board[r].every(cell => cell)) {
+                    board.splice(r, 1);
+                    board.unshift(Array(COLS).fill(0));
+                }
+            }
+        }
+
+        function startTetris() {
+            board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+            currentPiece = createPiece();
+            gameOver = false;
+            drawBoard();
+            if (tetrisInterval) clearInterval(tetrisInterval);
+            tetrisInterval = setInterval(moveDown, 800);
+        }
+
+        function stopTetris() {
+            if (tetrisInterval) clearInterval(tetrisInterval);
+            gameOver = true;
+        }
+
+        document.getElementById('move-left').addEventListener('click', () => { if(!currentPiece) return; currentPiece.x--; if(collision()) currentPiece.x++; drawBoard(); });
+        document.getElementById('move-right').addEventListener('click', () => { if(!currentPiece) return; currentPiece.x++; if(collision()) currentPiece.x--; drawBoard(); });
+        document.getElementById('rotate').addEventListener('click', () => {
+            if(!currentPiece) return;
+            const oldShape = currentPiece.shape;
+            currentPiece.shape = currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i]).reverse());
+            if (collision()) currentPiece.shape = oldShape;
+            drawBoard();
+        });
+
+    </script>
+</body>
+</html>      for (let r = 0; r < MS_SIZE; r++) {
                 for (let c = 0; c < MS_SIZE; c++) {
                     const btn = document.createElement('button');
                     btn.className = 'cell';
